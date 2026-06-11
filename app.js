@@ -1,24 +1,9 @@
 const { useState, useEffect, useRef, useCallback } = React;
 
 /*═══════════════ Firebase Init ═══════════════*/
-const firebaseConfig = {
-  apiKey: "AIzaSyCEHBUXT5Ah4uD3lXwQelX7VtjkjVSEDBs",
-  authDomain: "bashar-chatd4bea.firebaseapp.com",
-  projectId: "bashar-chat-d4bea",
-  storageBucket: "bashar-chatd4bea.firebasestorage.app",
-  messagingSenderId: "24950312504",
-  appId: "1:24950312504:web:643a5e439bc40ea0b5e0cd",
-  measurementId: "G-XGQYVZZS9C",
-};
+// Firebase auth removed — direct phone/name login used instead
 
-let auth;
-try {
-  const firebaseApp = firebase.initializeApp(firebaseConfig);
-  auth = firebase.auth(firebaseApp);
-  auth.languageCode = "bn";
-} catch (e) {
-  console.error("Firebase init error:", e);
-}
+// Firebase auth removed — using direct phone/name login
 
 /*═══════════════ Helpers ═══════════════*/
 const POLL_MS = 1500;
@@ -50,8 +35,6 @@ function App() {
   const [screen, setScreen] = useState("splash");
   const [dark, setDark] = useState(true);
   const [me, setMe] = useState(null);
-  const [regData, setRegData] = useState(null);
-  const [loginConf, setLoginConf] = useState(null);
   const [toast, setToast] = useState(null);
   const t = mkTheme(dark);
 
@@ -72,10 +55,8 @@ function App() {
   };
 
   const logout = async () => {
-    try { await auth.signOut(); } catch {}
     await sSet("session_current", {}, false);
     setMe(null); setScreen("login");
-    if (window._recaptchaVerifier) { try { window._recaptchaVerifier.clear(); } catch {} window._recaptchaVerifier = null; }
   };
 
   return React.createElement("div", {
@@ -99,10 +80,8 @@ function App() {
       style: { position:"fixed", top:16, left:"50%", transform:"translateX(-50%)", background:toast.color, color:"#fff", borderRadius:12, padding:"10px 20px", zIndex:9999, fontSize:13, fontWeight:600, boxShadow:"0 4px 20px rgba(0,0,0,0.3)", animation:"pop 0.3s ease", maxWidth:340, textAlign:"center" }
     }, toast.msg),
     screen === "splash" && React.createElement(Splash, {t}),
-    screen === "login" && React.createElement(LoginScreen, {t, dark, setDark, setScreen, setMe, setLoginConf, showToast}),
-    screen === "login-otp" && React.createElement(LoginOtpScreen, {t, dark, loginConf, setScreen, setMe, showToast}),
-    screen === "register" && React.createElement(RegisterScreen, {t, dark, setDark, setScreen, setRegData, showToast}),
-    screen === "otp" && React.createElement(OtpScreen, {t, dark, regData, setScreen, setMe, showToast}),
+    screen === "login" && React.createElement(LoginScreen, {t, dark, setDark, setScreen, setMe, showToast}),
+    screen === "register" && React.createElement(RegisterScreen, {t, dark, setDark, setScreen, setMe, showToast}),
     screen === "app" && me && React.createElement(ChatApp, {t, dark, setDark, me, setMe, logout, showToast})
   );
 }
@@ -171,98 +150,30 @@ function Btn({ children, onClick, secondary, danger, t, loading, disabled, style
   }, loading ? React.createElement("span", { style: { display:"inline-block", width:16, height:16, border:"2.5px solid rgba(255,255,255,0.4)", borderTopColor:"#fff", borderRadius:"50%", animation:"spin 0.7s linear infinite", verticalAlign:"middle" } }) : children);
 }
 
-function setupRecaptcha(containerId) {
-  if (window._recaptchaVerifier) { try { window._recaptchaVerifier.clear(); } catch {} window._recaptchaVerifier = null; }
-  const container = document.getElementById(containerId);
-  if (container) container.innerHTML = "";
-  window._recaptchaVerifier = new firebase.auth.RecaptchaVerifier(containerId, {
-    size: "invisible", callback: () => {},
-    "expired-callback": () => { if (window._recaptchaVerifier) { try { window._recaptchaVerifier.clear(); } catch {} window._recaptchaVerifier = null; } }
-  }, firebase.app());
-  return window._recaptchaVerifier;
-}
-
-function LoginScreen({ t, dark, setDark, setScreen, setMe, setLoginConf, showToast }) {
+function LoginScreen({ t, dark, setDark, setScreen, setMe, showToast }) {
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
-  const sendOtp = async () => {
+  const login = async () => {
     const p = phone.trim().replace(/\s/g, "");
     if (!p || p.length < 10) return showToast("সঠিক ফোন নম্বর দিন", "#ef4444");
     setBusy(true);
-    try {
-      const verifier = setupRecaptcha("recaptcha-login");
-      const confirmationResult = await auth.signInWithPhoneNumber(p, verifier);
-      setLoginConf({ confirmationResult, phone: p });
-      showToast("OTP পাঠানো হয়েছে 📱", "#5856d6");
-      setScreen("login-otp");
-    } catch (err) {
-      showToast("OTP পাঠানো যায়নি: " + (err.message || err.code), "#ef4444");
+    const user = await sGet("user_" + p);
+    if (user) {
+      await sSet("session_current", { phone: p }, false);
+      setMe(user); showToast("লগইন সফল! 🎉"); setScreen("app");
+    } else {
+      showToast("এই নম্বরে কোনো অ্যাকাউন্ট নেই। নতুন অ্যাকাউন্ট তৈরি করুন।", "#ef4444");
     }
     setBusy(false);
   };
   return React.createElement(AuthShell, { t, dark, setDark, title:"স্বাগতম 👋", sub:"আপনার অ্যাকাউন্টে লগইন করুন" },
-    React.createElement(Field, { label:"ফোন নম্বর", icon:"📱", t, value:phone, onChange:e=>setPhone(e.target.value), placeholder:"+8801XXXXXXXXX", type:"tel", onKeyDown:e=>e.key==="Enter"&&sendOtp() }),
-    React.createElement("div", { id:"recaptcha-login" }),
-    React.createElement(Btn, { t, onClick:sendOtp, loading:busy }, "OTP পাঠান →"),
+    React.createElement(Field, { label:"ফোন নম্বর", icon:"📱", t, value:phone, onChange:e=>setPhone(e.target.value), placeholder:"+8801XXXXXXXXX", type:"tel", onKeyDown:e=>e.key==="Enter"&&login() }),
+    React.createElement(Btn, { t, onClick:login, loading:busy }, "লগইন করুন →"),
     React.createElement(Btn, { t, secondary:true, onClick:()=>setScreen("register") }, "নতুন অ্যাকাউন্ট তৈরি করুন")
   );
 }
 
-function LoginOtpScreen({ t, dark, loginConf, setScreen, setMe, showToast }) {
-  const [digits, setDigits] = useState(["","","","","",""]);
-  const [busy, setBusy] = useState(false);
-  const [resendCd, setResendCd] = useState(30);
-  const refs = useRef([]);
-  useEffect(() => {
-    refs.current[0]?.focus();
-    const iv = setInterval(() => setResendCd(p => p > 0 ? p - 1 : 0), 1000);
-    return () => clearInterval(iv);
-  }, []);
-  const handleDigit = (i, v) => {
-    if (!/^\d?$/.test(v)) return;
-    const d = [...digits]; d[i] = v; setDigits(d);
-    if (v && i < 5) refs.current[i+1]?.focus();
-  };
-  const handleKey = (i, e) => { if (e.key === "Backspace" && !digits[i] && i > 0) refs.current[i-1]?.focus(); };
-  const handlePaste = (e) => {
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-    if (pasted.length === 6) { setDigits(pasted.split("")); refs.current[5]?.focus(); }
-  };
-  const verify = async () => {
-    const code = digits.join("");
-    if (code.length < 6) return showToast("৬ সংখ্যার OTP দিন", "#ef4444");
-    setBusy(true);
-    try {
-      await loginConf.confirmationResult.confirm(code);
-      const user = await sGet("user_" + loginConf.phone);
-      if (user) {
-        await sSet("session_current", { phone: loginConf.phone }, false);
-        setMe(user); showToast("লগইন সফল! 🎉"); setScreen("app");
-      } else {
-        showToast("OTP যাচাই সফল! প্রোফাইল তৈরি করুন", "#5856d6"); setScreen("register");
-      }
-    } catch (err) {
-      showToast("যাচাই ব্যর্থ: " + (err.message || err.code), "#ef4444");
-    }
-    setBusy(false);
-  };
-  return React.createElement(AuthShell, { t, dark, setDark:null, title:"OTP যাচাই 📱", sub:`${loginConf?.phone} নম্বরে SMS OTP পাঠানো হয়েছে` },
-    React.createElement("div", { style:{display:"flex",gap:8,justifyContent:"center",marginBottom:20}, onPaste:handlePaste },
-      digits.map((d, i) => React.createElement("input", {
-        key:i, ref:el=>refs.current[i]=el, value:d, maxLength:1,
-        onChange:e=>handleDigit(i,e.target.value), onKeyDown:e=>handleKey(i,e),
-        style:{width:50,height:60,textAlign:"center",fontSize:24,fontWeight:700,borderRadius:14,background:t.input,border:`2px solid ${d?t.accent:t.border}`,color:t.text,transition:"border-color 0.2s"}
-      }))
-    ),
-    React.createElement(Btn, { t, onClick:verify, loading:busy }, "যাচাই করুন ✓"),
-    React.createElement("div", { style:{textAlign:"center",marginTop:14,color:t.dim,fontSize:13} },
-      resendCd > 0 ? `পুনরায় পাঠান (${resendCd}s)` : React.createElement("button", { onClick:()=>setScreen("login"), style:{background:"none",border:"none",cursor:"pointer",color:t.accent,fontSize:13,fontWeight:600} }, "পুনরায় OTP পাঠান")
-    ),
-    React.createElement(Btn, { t, secondary:true, onClick:()=>setScreen("login") }, "← পিছনে যান")
-  );
-}
-
-function RegisterScreen({ t, dark, setDark, setScreen, setRegData, showToast }) {
+function RegisterScreen({ t, dark, setDark, setScreen, setMe, showToast }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
@@ -271,79 +182,22 @@ function RegisterScreen({ t, dark, setDark, setScreen, setRegData, showToast }) 
     if (!name.trim()) return showToast("নাম দিন", "#ef4444");
     if (!p || p.length < 10) return showToast("সঠিক ফোন নম্বর দিন (+8801...)", "#ef4444");
     setBusy(true);
-    try {
-      const existing = await sGet("user_" + p);
-      if (existing) { showToast("এই নম্বরে ইতিমধ্যে অ্যাকাউন্ট আছে, লগইন করুন", "#f59e0b"); setBusy(false); return; }
-      const verifier = setupRecaptcha("recaptcha-register");
-      const confirmationResult = await auth.signInWithPhoneNumber(p, verifier);
-      setRegData({ name: name.trim(), phone: p, confirmationResult });
-      showToast("OTP পাঠানো হয়েছে 📱", "#5856d6");
-      setScreen("otp");
-    } catch (err) {
-      showToast("OTP পাঠানো যায়নি: " + (err.message || err.code), "#ef4444");
-    }
+    const existing = await sGet("user_" + p);
+    if (existing) { showToast("এই নম্বরে ইতিমধ্যে অ্যাকাউন্ট আছে, লগইন করুন", "#f59e0b"); setBusy(false); return; }
+    const user = { phone: p, name: name.trim(), bio: "Hey! I'm using IMO Chat 👋", avatar: null, ts: Date.now(), online: true, lastSeen: Date.now() };
+    await sSet("user_" + p, user);
+    const idx = (await sGet("phone_index")) || [];
+    if (!idx.includes(p)) idx.push(p);
+    await sSet("phone_index", idx);
+    await sSet("session_current", { phone: p }, false);
+    setMe(user); showToast("অ্যাকাউন্ট তৈরি সফল! 🎉"); setScreen("app");
     setBusy(false);
   };
   return React.createElement(AuthShell, { t, dark, setDark, title:"নতুন অ্যাকাউন্ট ✨", sub:"একবার নিবন্ধন করুন, সারাজীবন ব্যবহার করুন" },
     React.createElement(Field, { label:"পুরো নাম", icon:"👤", t, value:name, onChange:e=>setName(e.target.value), placeholder:"আপনার নাম লিখুন" }),
     React.createElement(Field, { label:"ফোন নম্বর", icon:"📱", t, value:phone, onChange:e=>setPhone(e.target.value), placeholder:"+8801XXXXXXXXX", type:"tel", onKeyDown:e=>e.key==="Enter"&&register() }),
-    React.createElement("div", { id:"recaptcha-register" }),
-    React.createElement(Btn, { t, onClick:register, loading:busy }, "OTP পাঠান →"),
+    React.createElement(Btn, { t, onClick:register, loading:busy }, "অ্যাকাউন্ট তৈরি করুন →"),
     React.createElement(Btn, { t, secondary:true, onClick:()=>setScreen("login") }, "← লগইনে যান")
-  );
-}
-
-function OtpScreen({ t, dark, regData, setScreen, setMe, showToast }) {
-  const [digits, setDigits] = useState(["","","","","",""]);
-  const [busy, setBusy] = useState(false);
-  const [resendCd, setResendCd] = useState(30);
-  const refs = useRef([]);
-  useEffect(() => {
-    refs.current[0]?.focus();
-    const iv = setInterval(() => setResendCd(p => p > 0 ? p - 1 : 0), 1000);
-    return () => clearInterval(iv);
-  }, []);
-  const handleDigit = (i, v) => {
-    if (!/^\d?$/.test(v)) return;
-    const d = [...digits]; d[i] = v; setDigits(d);
-    if (v && i < 5) refs.current[i+1]?.focus();
-  };
-  const handleKey = (i, e) => { if (e.key === "Backspace" && !digits[i] && i > 0) refs.current[i-1]?.focus(); };
-  const handlePaste = (e) => {
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-    if (pasted.length === 6) { setDigits(pasted.split("")); refs.current[5]?.focus(); }
-  };
-  const verify = async () => {
-    const code = digits.join("");
-    if (code.length < 6) return showToast("৬ সংখ্যার OTP দিন", "#ef4444");
-    setBusy(true);
-    try {
-      await regData.confirmationResult.confirm(code);
-      const user = { phone: regData.phone, name: regData.name, bio: "Hey! I'm using IMO Chat 👋", avatar: null, ts: Date.now(), online: true, lastSeen: Date.now() };
-      await sSet("user_" + user.phone, user);
-      const idx = (await sGet("phone_index")) || [];
-      if (!idx.includes(user.phone)) idx.push(user.phone);
-      await sSet("phone_index", idx);
-      await sSet("session_current", { phone: user.phone }, false);
-      setMe(user); showToast("অ্যাকাউন্ট তৈরি সফল! 🎉"); setScreen("app");
-    } catch (err) {
-      showToast("যাচাই ব্যর্থ: " + (err.message || err.code), "#ef4444");
-    }
-    setBusy(false);
-  };
-  return React.createElement(AuthShell, { t, dark, setDark:null, title:"OTP যাচাই 📱", sub:`${regData?.phone} নম্বরে SMS পাঠানো হয়েছে` },
-    React.createElement("div", { style:{display:"flex",gap:8,justifyContent:"center",marginBottom:20}, onPaste:handlePaste },
-      digits.map((d, i) => React.createElement("input", {
-        key:i, ref:el=>refs.current[i]=el, value:d, maxLength:1,
-        onChange:e=>handleDigit(i,e.target.value), onKeyDown:e=>handleKey(i,e),
-        style:{width:50,height:60,textAlign:"center",fontSize:24,fontWeight:700,borderRadius:14,background:t.input,border:`2px solid ${d?t.accent:t.border}`,color:t.text,transition:"border-color 0.2s"}
-      }))
-    ),
-    React.createElement(Btn, { t, onClick:verify, loading:busy }, "যাচাই করুন ✓"),
-    React.createElement("div", { style:{textAlign:"center",marginTop:14,color:t.dim,fontSize:13} },
-      resendCd > 0 ? `পুনরায় পাঠান (${resendCd}s)` : React.createElement("button", { onClick:()=>setScreen("register"), style:{background:"none",border:"none",cursor:"pointer",color:t.accent,fontSize:13,fontWeight:600} }, "পুনরায় OTP পাঠান")
-    ),
-    React.createElement(Btn, { t, secondary:true, onClick:()=>setScreen("register") }, "← পিছনে যান")
   );
 }
 

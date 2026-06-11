@@ -173,6 +173,8 @@ function Btn({ children, onClick, secondary, danger, t, loading, disabled, style
 
 function setupRecaptcha(containerId) {
   if (window._recaptchaVerifier) { try { window._recaptchaVerifier.clear(); } catch {} window._recaptchaVerifier = null; }
+  const container = document.getElementById(containerId);
+  if (container) container.innerHTML = "";
   window._recaptchaVerifier = new firebase.auth.RecaptchaVerifier(containerId, {
     size: "invisible", callback: () => {},
     "expired-callback": () => { if (window._recaptchaVerifier) { try { window._recaptchaVerifier.clear(); } catch {} window._recaptchaVerifier = null; } }
